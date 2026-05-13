@@ -57,3 +57,4 @@ INSERT INTO juegos (codigo, nombre, descripcion, apuesta_min, apuesta_max) VALUE
   ('roulette',  'Ruleta',       'Ruleta europea: numero, color, par/impar, docena.',    10, 1000),
   ('blackjack', 'Blackjack',    'Cartas contra la banca. Hit, stand, doble.',           20, 2000)
 ON CONFLICT (codigo) DO NOTHING;
+//adasd
