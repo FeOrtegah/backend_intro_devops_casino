@@ -13,5 +13,12 @@ services:
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
       - pgdata:/var/lib/postgresql/data
 
-volumes:
-  pgdata:
+  backend:
+    build: .
+    container_name: casino_backend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql://casino:casino@db:5432/casino_db
