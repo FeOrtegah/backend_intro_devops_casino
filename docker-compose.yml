@@ -16,7 +16,7 @@ services:
       - casino-network
 
   backend:
-    build: ./backend_intro_devops_casino
+    build: .
     container_name: casino_backend
     restart: always
     ports:
@@ -32,7 +32,7 @@ services:
       - casino-network
 
   frontend:
-    build: ./frontend_intro_devops_casino-develop
+    build: ../frontend_intro_devops_casino-develop
     container_name: casino_frontend
     restart: always
     ports:
@@ -42,11 +42,9 @@ services:
     networks:
       - casino-network
 
-# Red interna y volúmenes
 networks:
   casino-network:
     driver: bridge
 
 volumes:
   pgdata:
-  #asdas
