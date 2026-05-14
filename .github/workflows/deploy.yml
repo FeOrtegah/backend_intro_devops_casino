@@ -1,0 +1,27 @@
+name: Backend Pipeline
+
+on:
+  push:
+    branches: [ deploy ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build
+        run: echo "Construyendo imagen..."
+
+  push:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Push
+        run: echo "Subiendo a Docker Hub..."
+
+  deploy:
+    needs: push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: echo "Desplegando en el servidor..."
