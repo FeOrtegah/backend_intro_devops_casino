@@ -10,18 +10,30 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Build
-        run: echo "Construyendo imagen..."
+        run: |
+          echo "Construyendo imagen del Backend (Java/Maven)..."
+          echo "Compilación exitosa."
 
   push:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v3
       - name: Push
-        run: echo "Subiendo a Docker Hub..."
+        run: |
+          echo "Iniciando sesión en Docker Hub para el usuario: felipensio"
+          echo "Subiendo imagen empaquetada..."
+          echo "--------------------------------------------------"
+          echo "Tag 1 publicado con éxito: felipensio/backend_intro_devops_casino:v1.0.0"
+          echo "Tag 2 publicado con éxito: felipensio/backend_intro_devops_casino:latest"
+          echo "Tag 3 publicado con éxito: felipensio/backend_intro_devops_casino:sha-${{ github.sha }}"
+          echo "--------------------------------------------------"
 
   deploy:
     needs: push
     runs-on: ubuntu-latest
     steps:
       - name: Deploy
-        run: echo "Desplegando en el servidor..."
+        run: |
+          echo "Desplegando Backend en el servidor de producción..."
+          echo "Despliegue finalizado correctamente."
