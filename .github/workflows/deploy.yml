@@ -9,31 +9,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Build
-        run: |
-          echo "Construyendo imagen del Backend (Java/Maven)..."
-          echo "Compilación exitosa."
+      - name: Build Docker Image
+        run: docker build -t felipensio/backend_intro_devops_casino:latest .
 
   push:
     needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Push
+      
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          
+      - name: Build and Push Tags
         run: |
-          echo "Iniciando sesión en Docker Hub para el usuario: felipensio"
-          echo "Subiendo imagen empaquetada..."
-          echo "--------------------------------------------------"
-          echo "Tag 1 publicado con éxito: felipensio/backend_intro_devops_casino:v1.0.0"
-          echo "Tag 2 publicado con éxito: felipensio/backend_intro_devops_casino:latest"
-          echo "Tag 3 publicado con éxito: felipensio/backend_intro_devops_casino:sha-${{ github.sha }}"
-          echo "--------------------------------------------------"
+          docker build -t felipensio/backend_intro_devops_casino:latest .
+          docker tag felipensio/backend_intro_devops_casino:latest felipensio/backend_intro_devops_casino:v1.0.0
+          docker tag felipensio/backend_intro_devops_casino:latest felipensio/backend_intro_devops_casino:sha-${{ github.sha }}
+          
+          docker push felipensio/backend_intro_devops_casino:latest
+          docker push felipensio/backend_intro_devops_casino:v1.0.0
+          docker push felipensio/backend_intro_devops_casino:sha-${{ github.sha }}
 
   deploy:
     needs: push
     runs-on: ubuntu-latest
     steps:
       - name: Deploy
-        run: |
-          echo "Desplegando Backend en el servidor de producción..."
-          echo "Despliegue finalizado correctamente."
+        run: echo "Despliegue simulado en producción completado."
