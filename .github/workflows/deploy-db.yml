@@ -6,11 +6,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-push:
     runs-on: ubuntu-latest
-    outputs:
-      image_tag: ${{ steps.tag.outputs.image_tag }}
-      ecr_registry: ${{ steps.ecr.outputs.registry }}
     steps:
       - uses: actions/checkout@v4
 
@@ -26,47 +23,16 @@ jobs:
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build imagen
+      - name: Build y Push imagen
         run: |
           IMAGE=${{ steps.ecr.outputs.registry }}/casino-backend
           docker build -t $IMAGE:${{ github.sha }} -t $IMAGE:latest .
-          echo "image=$IMAGE" >> $GITHUB_OUTPUT
-        id: build
-
-      - name: Guardar tag
-        id: tag
-        run: echo "image_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
-
-  push:
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Configurar credenciales AWS
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Login a ECR
-        id: ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Pull imagen del build
-        run: |
-          IMAGE=${{ steps.ecr.outputs.registry }}/casino-backend
-          docker pull $IMAGE:${{ needs.build.outputs.image_tag }} || true
-
-      - name: Push imagen
-        run: |
-          IMAGE=${{ steps.ecr.outputs.registry }}/casino-backend
-          docker push $IMAGE:${{ needs.build.outputs.image_tag }}
+          docker push $IMAGE:${{ github.sha }}
           docker push $IMAGE:latest
 
   deploy:
     runs-on: ubuntu-latest
-    needs: push
+    needs: build-push
     steps:
       - name: Desplegar en EC2-backend
         uses: appleboy/ssh-action@v1
