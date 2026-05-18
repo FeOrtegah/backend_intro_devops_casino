@@ -1,57 +1,64 @@
-name: Build, Push & Deploy backend
+name: Build, Push & Deploy database
 
 on:
   push:
     branches: [ deploy ]
+    paths: [ 'db/**' ]
   workflow_dispatch:
 
 jobs:
-  build-push:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configurar credenciales AWS
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Login a ECR
-        id: ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build y Push imagen
-        run: |
-          IMAGE=${{ steps.ecr.outputs.registry }}/casino-backend
-          docker build -t $IMAGE:${{ github.sha }} -t $IMAGE:latest .
-          docker push $IMAGE:${{ github.sha }}
-          docker push $IMAGE:latest
-
   deploy:
     runs-on: ubuntu-latest
-    needs: build-push
     steps:
-      - name: Desplegar en EC2-backend
+      - name: Desplegar en EC2-database
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.EC2_BACKEND_HOST }}
+          host: ${{ secrets.EC2_DATABASE_HOST }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
-              | docker login --username AWS --password-stdin \
-                ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
-            docker pull ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/casino-backend:latest
-            docker rm -f casino-backend || true
-            docker run -d --name casino-backend --restart unless-stopped \
-              -p 3000:3000 \
-              -e DB_HOST=${{ secrets.DB_HOST_PRIVATE }} \
-              -e DB_USER=casino \
-              -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
-              -e DB_NAME=casino_db \
-              -e JWT_SECRET=${{ secrets.JWT_SECRET }} \
-              -e CORS_ORIGIN="*" \
-              ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/casino-backend:latest
+            docker volume create pg_data || true
+            docker rm -f casino-db || true
+            docker run -d --name casino-db --restart unless-stopped \
+              -p 5432:5432 \
+              -v pg_data:/var/lib/postgresql/data \
+              -e POSTGRES_USER=casino \
+              -e POSTGRES_PASSWORD='ULjWbjXGBX0C7dUSSMkBpQEnoD4weSpcexiYTNQQ23u=' \
+              -e POSTGRES_DB=casino_db \
+              postgres:16-alpine
+            sleep 15
+            docker exec -i casino-db psql -U casino -d casino_db << 'EOF'
+            CREATE TABLE IF NOT EXISTS usuarios (
+              id SERIAL PRIMARY KEY,
+              username VARCHAR(40) NOT NULL UNIQUE,
+              email VARCHAR(120) NOT NULL UNIQUE,
+              password_hash VARCHAR(255) NOT NULL,
+              saldo NUMERIC(12,2) NOT NULL DEFAULT 1000.00,
+              rol VARCHAR(20) NOT NULL DEFAULT 'jugador',
+              creado_en TIMESTAMP NOT NULL DEFAULT NOW()
+            );
+            CREATE TABLE IF NOT EXISTS juegos (
+              id SERIAL PRIMARY KEY,
+              codigo VARCHAR(30) NOT NULL UNIQUE,
+              nombre VARCHAR(60) NOT NULL,
+              descripcion TEXT,
+              apuesta_min NUMERIC(10,2) NOT NULL DEFAULT 10,
+              apuesta_max NUMERIC(10,2) NOT NULL DEFAULT 1000,
+              activo BOOLEAN NOT NULL DEFAULT TRUE
+            );
+            CREATE TABLE IF NOT EXISTS transacciones (
+              id SERIAL PRIMARY KEY,
+              usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+              tipo VARCHAR(20) NOT NULL,
+              juego_id INTEGER REFERENCES juegos(id),
+              monto NUMERIC(12,2) NOT NULL,
+              saldo_post NUMERIC(12,2) NOT NULL,
+              detalle JSONB,
+              creada_en TIMESTAMP NOT NULL DEFAULT NOW()
+            );
+            INSERT INTO juegos (codigo, nombre, descripcion, apuesta_min, apuesta_max) VALUES
+              ('slots', 'Tragamonedas', 'Maquina de 3 rodillos con 8 simbolos.', 10, 500),
+              ('roulette', 'Ruleta', 'Ruleta europea', 10, 1000),
+              ('blackjack', 'Blackjack', 'Cartas contra la banca', 20, 2000)
+            ON CONFLICT (codigo) DO NOTHING;
+            EOF
