@@ -1,23 +1,25 @@
-name: Build & Deploy backend
+name: Build, Push & Deploy database
 
 on:
   push:
     branches: [ deploy ]
+    paths: [ 'db/**' ]
   workflow_dispatch:
 
 jobs:
   build-push-deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout código
+        uses: actions/checkout@v4
 
       - name: Configurar credenciales AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token:     ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region:            ${{ secrets.AWS_REGION }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login a ECR
         id: ecr
@@ -25,36 +27,49 @@ jobs:
         with:
           mask-password: 'true'
 
-      - name: Build & push backend
-        env:
-          REGISTRY: ${{ steps.ecr.outputs.registry }}
+      - name: Build imagen database
         run: |
-          IMAGE=$REGISTRY/casino-backend
-          docker build -t $IMAGE:${{ github.sha }} -t $IMAGE:latest .
+          IMAGE=${{ steps.ecr.outputs.registry }}/casino-db
+          docker build -t $IMAGE:${{ github.sha }} -t $IMAGE:latest ./db
+
+      - name: Push imagen a ECR
+        run: |
+          IMAGE=${{ steps.ecr.outputs.registry }}/casino-db
           docker push $IMAGE:${{ github.sha }}
           docker push $IMAGE:latest
 
-      - name: Desplegar en EC2-backend
+      - name: Deploy en EC2-database
         uses: appleboy/ssh-action@v1
-        env:
-          IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/casino-backend:latest
         with:
-          host: ${{ secrets.EC2_BACKEND_HOST }}
+          host: ${{ secrets.EC2_DATABASE_HOST }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: IMAGE
           script: |
-            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
-              | docker login --username AWS --password-stdin \
-                ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
-            docker pull "$IMAGE"
-            docker rm -f casino-backend || true
-            docker run -d --name casino-backend --restart unless-stopped \
-              -p 3000:3000 \
-              -e DB_HOST=${{ secrets.DB_HOST_PRIVATE }} \
-              -e DB_USER=casino \
-              -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
-              -e DB_NAME=casino_db \
-              -e JWT_SECRET=${{ secrets.JWT_SECRET }} \
-              -e CORS_ORIGIN="*" \
-              "$IMAGE"
+            docker volume create pg_data || true
+            docker rm -f casino-db || true
+            docker run -d \
+              --name casino-db \
+              --restart unless-stopped \
+              -p 5432:5432 \
+              -v pg_data:/var/lib/postgresql/data \
+              -e POSTGRES_USER=casino \
+              -e POSTGRES_PASSWORD='ULjWbjXGBX0C7dUSSMkBpQEnoD4weSpcexiYTNQQ23u=' \
+              -e POSTGRES_DB=casino_db \
+              postgres:16-alpine
+            sleep 10
+            docker exec -i casino-db psql -U casino -d casino_db << 'EOF'
+            CREATE TABLE IF NOT EXISTS usuarios (
+              id SERIAL PRIMARY KEY,
+              username VARCHAR(40) NOT NULL UNIQUE,
+              email VARCHAR(120) NOT NULL UNIQUE,
+              password_hash VARCHAR(255) NOT NULL,
+              saldo NUMERIC(12,2) NOT NULL DEFAULT 1000.00,
+              rol VARCHAR(20) NOT NULL DEFAULT 'jugador',
+              creado_en TIMESTAMP NOT NULL DEFAULT NOW()
+            );
+            INSERT INTO juegos (codigo, nombre, descripcion, apuesta_min, apuesta_max) VALUES
+              ('slots', 'Tragamonedas', 'Maquina de 3 rodillos con 8 simbolos.', 10, 500),
+              ('roulette', 'Ruleta', 'Ruleta europea', 10, 1000),
+              ('blackjack', 'Blackjack', 'Cartas contra la banca', 20, 2000)
+            ON CONFLICT (codigo) DO NOTHING;
+            EOF
