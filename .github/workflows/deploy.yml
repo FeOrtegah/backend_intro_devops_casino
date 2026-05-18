@@ -1,5 +1,4 @@
 name: Build, Push & Deploy backend
-
 on:
   push:
     branches: [ deploy ]
@@ -10,7 +9,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Configurar credenciales AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -18,11 +16,9 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ secrets.AWS_REGION }}
-
       - name: Login a ECR
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
-
       - name: Build y Push imagen
         run: |
           IMAGE=${{ steps.ecr.outputs.registry }}/casino-backend
@@ -31,27 +27,22 @@ jobs:
           docker push $IMAGE:latest
 
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: build-push
     steps:
-      - name: Desplegar en EC2-backend
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.EC2_BACKEND_HOST }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
-              | docker login --username AWS --password-stdin \
-                ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
-            docker pull ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/casino-backend:latest
-            docker rm -f casino-backend || true
-            docker run -d --name casino-backend --restart unless-stopped \
-              -p 3000:3000 \
-              -e DB_HOST=${{ secrets.DB_HOST_PRIVATE }} \
-              -e DB_USER=casino \
-              -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
-              -e DB_NAME=casino_db \
-              -e JWT_SECRET=${{ secrets.JWT_SECRET }} \
-              -e CORS_ORIGIN="*" \
-              ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/casino-backend:latest
+      - name: Deploy en EC2 backend
+        run: |
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
+            | docker login --username AWS --password-stdin \
+              ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+          docker pull ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/casino-backend:latest
+          docker rm -f casino-backend || true
+          docker run -d --name casino-backend --restart unless-stopped \
+            -p 3000:3000 \
+            -e DB_HOST=${{ secrets.DB_HOST_PRIVATE }} \
+            -e DB_USER=casino \
+            -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
+            -e DB_NAME=casino_db \
+            -e JWT_SECRET=${{ secrets.JWT_SECRET }} \
+            -e CORS_ORIGIN="*" \
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/casino-backend:latest
